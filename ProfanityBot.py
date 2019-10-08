@@ -6,6 +6,9 @@ from better_profanity import profanity
 
 class SettingsHandler:
 
+    def __init__(self):
+        self.settings_data = self.load()
+
     def load(self):
         with open('settings.json') as settings_file:
             return json.load(settings_file)
@@ -14,6 +17,8 @@ class SettingsHandler:
         with open('settings.json', 'w') as outfile:
             json.dump(data, outfile)
 
+    def get_settings(self):
+        return self.settings_data['Settings']
 
 class NameScan:
 
@@ -45,7 +50,11 @@ class SentryBot(discord.Client):
         if message.author.id == self.user.id:
             return
 
-        if message.channel.id != 629417259768741898:
+        if message.content.startswith('!sbhere'):
+            settings['Channel'] = message.channel.id
+            await message.channel.send('Channel output set to here.')
+
+        if message.channel.id != settings['Channel'] and settings['Channel'] != -1:
             return
 
         if message.content.startswith('!sbsettings'):
@@ -78,8 +87,9 @@ class SentryBot(discord.Client):
             await message.channel.send('Member list dumped to JSON')
 
 
-settings = SettingsHandler()
+settingsHandler = SettingsHandler()
+settings = settingsHandler.get_settings()
 scanner = NameScan()
 client = SentryBot()
-client.run('NjI5NDE5ODIxNzc1MTkyMTE3.XZZgRw.sZllydZ401N4FLdZrW8urs8tzq8')
+client.run(settings['Token'])
 
