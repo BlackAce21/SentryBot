@@ -63,6 +63,7 @@ class CommandExecutor:
                                        "```")
             await message.channel.send("```Contacting the author: \n"
                                        "Any requests for features or help should be directed to Black Ace#8725 via discord or emailed to me at the1blackace21@gmail.com\n"
+                                       "You can also submit requests and issues to the github at https://github.com/BlackAce21/SentryBot/issues"
                                        "I do not check my email frequently however so discord really is the better option.```")
 
         # Set log channel setting
