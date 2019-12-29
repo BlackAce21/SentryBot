@@ -1,25 +1,6 @@
 import discord
-import json
-from better_profanity import profanity
-from ConfigHandler import ConfigManager, ExceptionsManager
-
-
-class NameScan:
-
-    def __init__(self):
-        self.default_words = open('default_words.txt').read().splitlines()
-
-    def scan_account_names(self, guild):
-        members = guild.members
-        results = {}
-        profanity.load_censor_words(self.default_words)
-        for member in members:
-            if member.name in exceptions['exempt']:
-                continue
-            if profanity.contains_profanity(member.name) or member.name in exceptions['restricted']:
-                results[member.id] = member.name
-        return results
-
+from CommandHandler import CommandExecutor, NameScan
+from ConfigHandler import ConfigManager
 
 class SentryBot(discord.Client):
 
@@ -34,53 +15,40 @@ class SentryBot(discord.Client):
         if message.author.id == self.user.id:
             return
 
-        if message.content.startswith('!sbhere'):
-            config['Settings']['channel'] = message.channel.id
-            await message.channel.send('Channel output set to here.')
+        if message.content.startswith('!sb'):
+            commandExecutor = CommandExecutor(config, configManager, scanner)
+            await commandExecutor.command_processing(message)
 
-        if message.channel.id != config['Settings']['channel'] and config['Settings']['channel'] != -1:
+    async def on_member_join(self, member):
+        if config.getboolean('Settings', 'auto_kick'):
+            await scanner.scan_single_name(member.guild, member)
+
+    async def on_member_update(self, before, after):
+        # Make sure there is a nickname for this event
+        if after.nick == None:
+            return
+        # Make sure the nickname changed to something new
+        if before.nick == after.nick:
             return
 
-        if message.content.startswith('!sbsettings'):
-            return
+        print("Member updated for " + str(before.nick) + " to " + after.nick)
 
-        if message.content.startswith('!sbhello'):
-            await message.channel.send('Hello {0.author.mention}'.format(message))
-
-        if message.content.startswith('!sbscan'):
-            await message.channel.send('{0.author.mention} Initiating name scan...'.format(message))
-            scan_results = scanner.scan_account_names(message.guild)
-            for k, v in scan_results.items():
-                await message.channel.send('Found improper name, ' + '||' + v + '||' + ' Obfuscated: ||' +
-                                           profanity.censor(v) + '||' + ' - No Action Taken')
-            await message.channel.send('Scan Complete! Found ' + str(len(scan_results)) + ' bad user names.')
-
-        if message.content.startswith('!sbcreatelist'):
-            members = message.guild.members
-            await message.channel.send('Pulling member list information...')
-            data = {}
-            for member in members:
-                data[member.id] = []
-                data[member.id].append({
-                    'name': member.name,
-                    'display_name': member.display_name
-                })
-
-            with open('members.json', 'w') as outfile:
-                json.dump(data, outfile)
-            await message.channel.send('Member list dumped to JSON')
+        if config.getboolean('Settings', 'name_change_protection'):
+            await scanner.nickname_scanner(before, after)
 
 
-# init config and exception
-configManager = ConfigManager()
-config = configManager.get_config()
-
-exceptionsManager = ExceptionsManager()
-exceptions = exceptionsManager.get_exceptions()
-
-# init scanner and client
-scanner = NameScan()
+# init client
 client = SentryBot()
 
+configManager = ConfigManager()
+config = configManager.config
+scanner = NameScan(config)
+token = config.get('Settings', 'token')
+
+if token == 'default':
+    token = input("Please input token:")
+    config['Settings']['token'] = token
+    configManager.save_config()
+
 # establish client information and run
-client.run()
+client.run(token)
