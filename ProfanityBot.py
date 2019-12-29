@@ -20,8 +20,15 @@ class SentryBot(discord.Client):
             await commandExecutor.command_processing(message)
 
     async def on_member_join(self, member):
+        block_welcome = False
         if config.getboolean('Settings', 'auto_kick'):
-            await scanner.scan_single_name(member.guild, member)
+            block_welcome = await scanner.scan_single_name(member.guild, member)
+        if config.getboolean('Settings', 'handle_welcome_message') and not block_welcome:
+            welcome_channel = config.getint('Settings', 'welcome_channel')
+            welcome_message = config.get('Settings', 'welcome_message')
+            if welcome_channel != -1:
+                await member.guild.get_channel(welcome_channel).send(welcome_message.format(member))
+
 
     async def on_member_update(self, before, after):
         # Make sure there is a nickname for this event
@@ -31,7 +38,7 @@ class SentryBot(discord.Client):
         if before.nick == after.nick:
             return
 
-        print("Member updated for " + str(before.nick) + " to " + after.nick)
+        #print("Member updated for " + str(before.nick) + " to " + after.nick)
 
         if config.getboolean('Settings', 'name_change_protection'):
             await scanner.nickname_scanner(before, after)

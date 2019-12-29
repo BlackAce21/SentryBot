@@ -1,6 +1,6 @@
 import discord
 from better_profanity import profanity
-from ConfigHandler import ConfigManager, ExceptionsManager
+from ConfigHandler import ExceptionsManager
 
 
 class CommandExecutor:
@@ -11,6 +11,11 @@ class CommandExecutor:
         self.scanner = globalScanner
 
     async def command_processing(self, message):
+
+        if message.content.startswith('!sbpotato'):
+            await message.channel.send("How are you doing today? Because I'm a :potato:")
+            return
+
         # Get log output channel from config
         logchannel = self.config.getint('Settings', 'channel')
 
@@ -46,13 +51,15 @@ class CommandExecutor:
                                        "\n"
                                        "!sbclear: Clears the log output channel (sets it as -1 on the config side)\n"
                                        "\n"
-                                       "!sbtoggle <Options:--auto-kick|--nickname-prot>: Toggles functionality to auto kick new joins with vulgar names, and protection for nickname changes per server\n"
+                                       "!sbtoggle <Options:--auto-kick|--nickname-prot|--send-welcome>: Toggles functionality to auto kick new joins with vulgar names, protection for nickname changes per server, and handling welcome messages\n"
                                        "\n"
                                        "!sbmessage <Options:-k|-w>: Sets the message to be displayed in a DM to the user when they are kicked, or publicly when they join the server, does not display welcome message if the user has a bad name. Welcome message functionality should be disabled in other bots for this to be effective. \n"
                                        "\n"
                                        "!sbstatus: Displays setting information of the bot\n"
                                        "\n"
-                                       "!sbscan <Optional:-k>: A manual scan for all current members of the server. Will output to the current channel the command is used in if no log channel is set, will NOT output at all if one is set. You can run this command without any options to simply scan for bad names or add the -k to kick every player it finds. Also displays what was detected."
+                                       "!sbscan <Optional:-k>: A manual scan for all current members of the server. Will output to the current channel the command is used in if no log channel is set, will NOT output at all if one is set. You can run this command without any options to simply scan for bad names or add the -k to kick every player it finds. Also displays what was detected. \n"
+                                       "\n"
+                                       "!sbexception <Options:--add-exempt|--remove-exempt|--add-restricted|--remove-restricted|--list>: For more detailed information on this command use !sbexception without any arguements."
                                        "```")
             await message.channel.send("```Contacting the author: \n"
                                        "Any requests for features or help should be directed to Black Ace#8725 via discord or emailed to me at the1blackace21@gmail.com\n"
@@ -64,6 +71,14 @@ class CommandExecutor:
             self.configManager.save_config()
             await message.channel.send('Log channel output set to here, commands will also now only be accepted here.')
             return
+
+        if message.content.startswith('!sbwelcome'):
+            self.config['Settings']['welcome_channel'] = str(message.channel.id)
+            self.configManager.save_config()
+            if logchannel != -1:
+                await message.guild.get_channel(logchannel).send('Welcome messages will be handled in ' + message.channel.mention)
+            else:
+                await message.channel.send('Welcome messages will be handled in this channel.')
 
         # Clear log channel setting
         if message.content.startswith('!sbclear'):
@@ -91,7 +106,14 @@ class CommandExecutor:
                 current = self.config.getboolean('Settings', 'name_change_protection')
                 self.config['Settings']['name_change_protection'] = str(not current)
                 self.configManager.save_config()
-                await message.channel.send('Auto kick has been ' + ('enabled' if not current else 'disabled'))
+                await message.channel.send('Nick name protection has been ' + ('enabled' if not current else 'disabled'))
+
+            # Handle toggle for welcome messages
+            if '--send-welcome' in message.content:
+                current = self.config.getboolean('Settings', 'handle_welcome_message')
+                self.config['Settings']['handle_welcome_message'] = str(not current)
+                self.configManager.save_config()
+                await message.channel.send('Handling of welcome messages has been ' + ('enabled' if not current else 'disabled'))
 
         # Change messages content
         if message.content.startswith('!sbmessage '):
@@ -113,11 +135,18 @@ class CommandExecutor:
             auto_kick_mode = self.config.getboolean('Settings', 'auto_kick')
             name_change_prot = self.config.getboolean('Settings', 'name_change_protection')
             kick_message = self.config.get('Settings', 'kick_message')
+            handle_welcome = self.config.getboolean('Settings', 'handle_welcome_message')
+            welcome_channel_id = self.config.getint('Settings', 'welcome_channel')
+            welcome_channel = "None"
+            if welcome_channel_id != -1:
+                welcome_channel = message.guild.get_channel(welcome_channel_id).mention
             welcome_message = self.config.get('Settings', 'welcome_message')
             await message.channel.send('Hello {0.author.mention}, I am online \n'.format(message) +
                                        'Auto Kick Mode: ' + str(auto_kick_mode) + '\n' +
                                        'Name Change Protection: ' + str(name_change_prot) + '\n' +
                                        'Kick Message: ' + kick_message + '\n' +
+                                       'Handle Welcome Messages: ' + str(handle_welcome) + '\n' +
+                                       'Channel for welcome messages: ' + welcome_channel + '\n' +
                                        'Welcome Message: ' + welcome_message)
             return
 
@@ -133,27 +162,29 @@ class CommandExecutor:
                                            profanity.censor(v) + '||' + (' - Player Kicked' if kick_mode else ' - No Action Taken'))
                 if kick_mode:
                     guild = message.guild
-                    guild.kick(guild.get_member(k), self.config.get('Settings', 'kick_message'))
+                    member = guild.get_member(k)
+                    await member.send(self.config.get('Settings', 'kick_message'))
+                    await guild.kick(member, reason='Kicked during manual name scan. Scan initiated by ' + message.author.name)
             await message.channel.send('Scan Complete! Found ' + str(len(scan_results)) + ' bad user names.')
 
         # Handle exception command
         if message.content.startswith('!sbexception'):
             if message.content.startswith('!sbexception '):
                 content = message.content.replace('!sbexception ', '')
-                if content.startswith('--add_exempt '):
-                    toadd = content.replace('--add_exempt ', '')
+                if content.startswith('--add-exempt '):
+                    toadd = content.replace('--add-exempt ', '')
                     exceptionsManager.add_exception('exempt', toadd)
                     await message.channel.send('User name ' + toadd + " has been added to the exceptions list and will be ignored during scans.")
                     return
 
-                if content.startswith('--add_restricted '):
-                    toadd = content.replace('--add_restricted ', '')
+                if content.startswith('--add-restricted '):
+                    toadd = content.replace('--add-restricted ', '')
                     exceptionsManager.add_exception('restricted', toadd)
                     await message.channel.send('User name ||' + toadd + '|| has been added to the restricted list and will be kicked automatically on join. This is effectively a name ban.')
                     return
 
-                if content.startswith('--remove_exempt '):
-                    toremove = content.replace('--remove_exempt ', '')
+                if content.startswith('--remove-exempt '):
+                    toremove = content.replace('--remove-exempt ', '')
                     if exceptionsManager.contains('exempt', toremove):
                         exceptionsManager.remove_exception('exempt', toremove)
                         await message.channel.send('User name ' + toremove + ' has been removed from the exceptions list and will no longer be ignored during scans.')
@@ -161,8 +192,8 @@ class CommandExecutor:
                         await message.channel.send('User name ' + toremove + ' not found on the exceptions list. !sbexception --list for a full list.')
                     return
 
-                if content.startswith('--remove_restricted '):
-                    toremove = content.replace('--remove_restricted ', '')
+                if content.startswith('--remove-restricted '):
+                    toremove = content.replace('--remove-restricted ', '')
                     if exceptionsManager.contains('restricted', toremove):
                         exceptionsManager.remove_exception('restricted', toremove)
                         await message.channel.send('User name ||' + toremove + '|| has been removed from the restricted list and will no longer be kicked automatically.')
@@ -189,13 +220,13 @@ class CommandExecutor:
                     return
 
             await message.channel.send('```Help menu for command !sbexception```\n'
-                                       '> !sbexception --add_exempt <name>\n'
+                                       '> !sbexception --add-exempt <name>\n'
                                        'This command will add exceptions to be ignored by the name scanner.\n'
-                                       '> !sbexception --remove_exempt <name>\n'
+                                       '> !sbexception --remove-exempt <name>\n'
                                        'This command will remove exceptions to be ignored by the name scanner\n'
-                                       '> !sbexception --add_restricted <name>\n'
+                                       '> !sbexception --add-restricted <name>\n'
                                        'This command will add restricted names that will always be blacklisted by the scanner.\n'
-                                       '> !sbexception --remove_restricted <name>\n'
+                                       '> !sbexception --remove-restricted <name>\n'
                                        'This command will remove restricted names from the blacklist\n'
                                        '> !sbexception --list\n'
                                        'This command will list all names in either list.')
@@ -218,18 +249,26 @@ class NameScan:
                 continue
             if profanity.contains_profanity(member.name) or exceptionsManager.contains('restricted', member.name):
                 results[member.id] = member.name
-                if kick_mode:
-                    await guild.kick(member, reason=self.config.get('Settings', 'kick_message'))
         return results
 
     async def scan_single_name(self, guild, member):
+        """
+Scans the given member's name in the given guild and kicks the user if profanity is detected. Checks for kick settings are not handled internally.
+        :param guild: The of the user to scan
+        :param member: The member to scan the name of
+        :return: True if the user is kicked, otherwise false
+        """
         if exceptionsManager.contains('exempt', member.name):
-            return
+            return False
         if profanity.contains_profanity(member.name) or exceptionsManager.contains('restricted', member.name):
             log_channel = self.config.getint('Settings', 'channel')
             if log_channel != -1:
                 await guild.get_channel(log_channel).send('User ||' + member.name + '|| has been kicked from the server.')
-            await guild.kick(member, reason=self.config.get('Settings', 'kick_message'))
+            await member.send(self.config.get('Settings', 'kick_message'))
+            await guild.kick(member, reason='Kicked automatically on join. Improper name detected.')
+            return True
+        else:
+            return False
 
     async def nickname_scanner(self, before, after):
         if exceptionsManager.contains('exempt', after.nick):

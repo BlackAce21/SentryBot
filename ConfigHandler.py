@@ -35,6 +35,8 @@ class ConfigManager:
                             'please change your account name or contact the server administrator '
                             'if you believe this is an error. '
                             'https://support.discordapp.com/hc/en-us/articles/213480948-How-do-I-change-my-Username-',
+            'handle_welcome_message': 'False',
+            'welcome_channel': '-1',
             'welcome_message': '{0.mention}, Welcome to the server! Tell us about yourself :wink:'
         }
 
